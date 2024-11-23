@@ -21,6 +21,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 '''
 
+
 import json
 import time
 #import board
@@ -58,22 +59,22 @@ class iot_device:
         self._UUID = secrets["MQTT_Device_info"]["ids"][0]
         self._Name = secrets["device_ID"]   #TODO: Make this calculated from the readable name?
         self._ReadableName = secrets["MQTT_Device_info"]["name"]
-        
+
         self._MQTT_Device_Info = secrets["MQTT_Device_info"]
         self._MQTT_State_Topic = "homeassistant/sensor/" + self._UUID + "/state"
-        self._MQTT_lwt = "homeassistant/sensor/" + self._UUID + "_" + self._Name + "/lwt"  
+        self._MQTT_lwt = "homeassistant/sensor/" + self._UUID + "_" + self._Name + "/lwt"
 
         self._pool = socketpool.SocketPool(wifi.radio)
         self._ssl_context = ssl.create_default_context()
-        
+
         self._SendDataTimeout = 5   #Set to zero to disable retry on sending data.
-        
-        
+
+
         self._NumSensors = 0
         self._NumBinarySensors = 0
         self._SensorListDict = {}
         self._BinarySensorListDict = {}
-        
+
         wifi.radio.hostname = self._Name    #TODO: make sure that this is an allowable hostname (only alphabetic characters (A-Z), numeric characters (0-9), the minus sign (-), and the period (.))
 
         # Set up a MiniMQTT Client
@@ -88,15 +89,15 @@ class iot_device:
         self._WiFiConnectStart = None
         self._WiFiConnectOK = None
         self._WiFiConnectError = None
-        
+
         self._MQTTConnectStart = None
         self._MQTTConnectOK = None
         self._MQTTConnectError = None
-        
+
         self._NTPConnectStart = None
         self._NTPConnectOK = None
         self._NTPConnectError = None
-        
+
         self._UseDST = True
         self._DSTApplied = False
 
@@ -166,7 +167,7 @@ class iot_device:
         while True:
             if Retries > NTP_Retries:
                 #if we get here, NTP time sync failed
-                
+
                 print("skipped")
                 return False
             else:
@@ -211,7 +212,7 @@ class iot_device:
         #   changes taking place at 2:00 a.m. local time.
         #
         #TODO: This function corrects the date/time struct but does not update the RTC.
-        
+
         corrected_time_struct = None
         corrected_time = time.mktime(now)
 
@@ -240,10 +241,10 @@ class iot_device:
         #Return the corrected time
         corrected_time_struct = time.localtime(corrected_time)
         return corrected_time_struct
-    
+
     def IsDST(self, now):
         '''Returns True if the given date should have daylight savings time applied.
-    
+
             TODO: Should this be in the class, or just a helper function?
         '''
         if ((now.tm_mon > 3) and (now.tm_mon < 11)) or                                          \
@@ -252,16 +253,16 @@ class iot_device:
             #is DST
             return True
         return False
-    
+
     def SendDiscovery(self):
         #Subscriptions
         #mqtt_client.subscribe(MQTT_Light_topic, qos=1)
         #mqtt_client.subscribe(MQTT_Remote_Data_Topic, qos=1)
         #mqtt_client.subscribe(MQTT_Light_Command_Topic, qos=1)
-        
+
         #Last will
-        self._mqtt_client.publish(self._MQTT_lwt, 'online', qos=1, retain=True)  
-    
+        self._mqtt_client.publish(self._MQTT_lwt, 'online', qos=1, retain=True)
+
         #Sensors
         for sensor in self._SensorListDict:
             SensorID = self._UUID + "_" + self._SensorListDict[sensor].Name
@@ -277,7 +278,7 @@ class iot_device:
                                                 "payload_not_available":  "offline",                                            \
                                                 "device":                 self._MQTT_Device_Info })
             self._mqtt_client.publish(MQTT_Config, MQTT_Config_Payload, qos=1, retain=True)
-            
+
         for sensor in self._BinarySensorListDict:
             SensorID = self._UUID + "_" + self._BinarySensorListDict[sensor].Name
             MQTT_Config = "homeassistant/binary_sensor/" + SensorID + "/config"
@@ -293,10 +294,10 @@ class iot_device:
                                                 "payload_not_available":  "offline",                                                    \
                                                 "device":                 self._MQTT_Device_Info })
             self._mqtt_client.publish(MQTT_Config, MQTT_Config_Payload, qos=1, retain=True)
-      
+
         #Lights
         #mqtt_client.publish(MQTT_Config_light, MQTT_Config_Light_Payload, qos=1, retain=True)
-        
+
         #Buttons
         #mqtt_client.publish(MQTT_Config_Upper_Button, MQTT_Config_Upper_Button_Payload, qos=1, retain=True)
         #mqtt_client.publish(MQTT_Config_Lower_Button, MQTT_Config_Lower_Button_Payload, qos=1, retain=True)
@@ -305,7 +306,7 @@ class iot_device:
         #Sends empty config packets to home assistant. This tells home assistant to delete these sensors from its config.
         #Should never be called, but I am saving this here in case it is needed for debug.
         print("Delete the MQTT sensor")
-        
+
         #Sensors
         for sensor in self._SensorListDict:
             SensorID = self._UUID + "_" + self._SensorListDict[sensor].Name
@@ -328,7 +329,7 @@ class iot_device:
         #TODO: What happens if the sensor name does not exist?
         #TODO: Send removal packet over MQTT when a sensor is removed
         del self._SensorListDict[SensorName]
-        
+
     def AddBinarySensor(self, SensorToAdd, ToInit = False):
         #TODO: check if the sensor name already exsists.
         self._BinarySensorListDict[SensorToAdd.Name] = SensorToAdd
@@ -357,12 +358,12 @@ class iot_device:
             self._SensorListDict[SensorName].GetData
         for SensorName in self._BinarySensorListDict:
             self._BinarySensorListDict[SensorName].GetData
-            
+
     def PrintSensorValues(self):
         #Does not query the sensor for a new value.
         for SensorName in self._SensorListDict:
             print(self._SensorListDict[SensorName].Name, ":", self._SensorListDict[SensorName].CurrentVal)
-            
+
         for SensorName in self._BinarySensorListDict:
             print(self._BinarySensorListDict[SensorName].Name, ":", self._BinarySensorListDict[SensorName].CurrentVal)
 
@@ -374,7 +375,7 @@ class iot_device:
         for SensorName in self._BinarySensorListDict:
             ValuesToSend[SensorName] = self._BinarySensorListDict[SensorName].CurrentVal
         print(ValuesToSend)
-        
+
         #TODO: not sure if it is possible for this to fail. I don't think the device checks to see if the server recieved the data.
         for x in range(self._SendDataTimeout+1):
             try:
@@ -383,28 +384,30 @@ class iot_device:
                 print("Send failed:", e)
             else:
                 return
-                
-                
+
+
     def GetSensorValue(self, SensorName):
+        #TODO: Handle the case where SensorName is not a valid sensor.
+
         return self._SensorListDict[SensorName].CurrentVal
 
         '''
         When server is disconnected, leave network port disconnected for a while:
         after a few min:
             Send failed: [Errno 11] EAGAIN  <-- this happens for a while (5 min)
-            
+
             *then*
-            
+
             Send failed: [Errno 113] ECONNABORTED
             Send failed: [Errno 128] ENOTCONN
             Send failed: 32
             Send failed: 32
-            
+
             *send failed 32 keeps happening therafter.
             *it appears these commends fail immediately
         '''
-        
-        
+
+
         '''
         {'relay_1': False, 'ds_temp_1': 19.875, 'relay_0': False, 'fan_temp': 26, 'relay_3': False, 'relay_2': False}
         Traceback (most recent call last):
@@ -413,7 +416,7 @@ class iot_device:
          File "adafruit_minimqtt/adafruit_minimqtt.py", line 636, in publish
         OSError: [Errno 104] ECONNRESET
         '''
-        
+
 
     def GetCurrentVal(self, SensorName):
         #Return the latest saved value from the sensor. Does not query the sensor for a new value.
@@ -429,7 +432,7 @@ class iot_device:
 
     @WiFiConnectStart.setter
     def WiFiConnectStart(self, func):
-        self._WiFiConnectStart = func 
+        self._WiFiConnectStart = func
 
     @property
     def WiFiConnectOK(self):
@@ -438,7 +441,7 @@ class iot_device:
     @WiFiConnectOK.setter
     def WiFiConnectOK(self, func):
         self._WiFiConnectOK = func
-        
+
     @property
     def WiFiConnectError(self):
         return self._WiFiConnectError
@@ -454,7 +457,7 @@ class iot_device:
     @MQTTConnectStart.setter
     def MQTTConnectStart(self, func):
         self._MQTTConnectStart = func
-    
+
     @property
     def MQTTConnectOK(self):
         return self._MQTTConnectOK
@@ -462,7 +465,7 @@ class iot_device:
     @MQTTConnectOK.setter
     def MQTTConnectOK(self, func):
         self._MQTTConnectOK = func
-        
+
     @property
     def MQTTConnectError(self):
         return self._MQTTConnectError
@@ -470,7 +473,7 @@ class iot_device:
     @MQTTConnectError.setter
     def MQTTConnectError(self, func):
         self._MQTTConnectError = func
-        
+
     @property
     def NTPConnectStart(self):
         return self._NTPConnectStart
@@ -478,7 +481,7 @@ class iot_device:
     @NTPConnectStart.setter
     def NTPConnectStart(self, func):
         self._NTPConnectStart = func
-    
+
     @property
     def NTPConnectOK(self):
         return self._NTPConnectOK
@@ -486,7 +489,7 @@ class iot_device:
     @NTPConnectOK.setter
     def NTPConnectOK(self, func):
         self._NTPConnectOK = func
-        
+
     @property
     def NTPConnectError(self):
         return self._NTPConnectError
@@ -494,4 +497,4 @@ class iot_device:
     @NTPConnectError.setter
     def NTPConnectError(self, func):
         self._NTPConnectError = func
-        
+

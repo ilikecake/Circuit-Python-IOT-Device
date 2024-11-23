@@ -71,10 +71,29 @@ class timer:
             #We are not given either a time or time_struct object.
             raise TypeError('Time must be a time or time_struct object')
         
+        for key in EventToAdd:
+            if key != 'time':
+                EventToAdd[key]['calc'] = False
+                try:
+                    #EventToAdd[key]['type'] #TODO: Catch bad event types here.
+                    if EventToAdd[key]['type'] == 'ramp':
+                        #TODO: This will do something wierd if start time and end time are on different days.
+                        #Y is value, X is time. Calculate slope and intercept.
+                        EventToAdd[key]['m'] = (EventToAdd[key]['EndValue'] - EventToAdd[key]['StartValue'])/((EventToAdd[key]['EndTime'].hour*60 + EventToAdd[key]['EndTime'].minute) - (EventToAdd[key]['StartTime'].hour*60 + EventToAdd[key]['StartTime'].minute))
+                        EventToAdd[key]['b'] = EventToAdd[key]['StartValue'] - EventToAdd[key]['m']*(EventToAdd[key]['StartTime'].hour*60 + EventToAdd[key]['StartTime'].minute)
+                except KeyError as e:
+                    #str(e) will be the name of the nonexsistent key.
+                    if str(e) == "type":
+                        #There is an event at time 0 that is not calculated. Leave this alone.
+                        raise ValueError(f"{key} must have a 'type' key")
+        
+        #TODO: Make sure that StartTime and event time are the same for ramp events.
+        
         #Check to see if the event time we are trying to add is already in the list.
         #If so, update the current event with the new states.
         for event in self._EventList:
             if event['time'] == EventToAdd['time']:
+                #TODO: Does this overwrite the time key?
                 for key, value in EventToAdd.items():
                     event[key] = value
                 #If we are updating an exsisting event, the list is already sorted.
@@ -166,17 +185,37 @@ class timer:
             for output in self._OutputList:
                 line = EventNameStr.format(output)
                 for event in self._EventList:
-                    try:
-                        if event[output]['type'] == 'calc':
-                            if ShowCalc:
-                                line = line + ValStr.format(event[output]['value'])
-                            else:
-                                line = line + ValStr.format(' ')
+                    if event[output]['type'] == 'value':
+                        StrToAdd = ValStr.format(event[output]['value'])
+                    elif event[output]['type'] == 'ramp':
+                        StrToAdd = ValStr.format('R'+str(event[output]['StartValue']))
+                    else:
+                        raise ValueError(f"Unknown event type {event[output]['type']}")
+                    
+                    if event[output]['calc'] is True:
+                        if ShowCalc:
+                            line = line + StrToAdd
                         else:
-                            #TODO: In the future we can probably add other if/else statements here to handle more complicated events.
-                            line = line + ValStr.format(event[output]['value'])
-                    except KeyError:
-                        line = line + ValStr.format(event[output]['value'])
+                            line = line + ValStr.format(' ')
+                    else:
+                        line = line + StrToAdd
+                    
+                    #try:
+                    #    if event[output]['calc'] is True:
+                    #        if ShowCalc:
+                    #            line = line + ValStr.format(event[output]['value'])
+                    #        else:
+                    #            line = line + ValStr.format(' ')
+                    #    elif event[output]['type'] == 'ramp':
+                    #        if ShowCalc:
+                    #            line = line + ValStr.format(event[output]['StartValue'])
+                    #        else:
+                    #            line = line + ValStr.format(' ')
+                    #    else:
+                    #        #TODO: In the future we can probably add other if/else statements here to handle more complicated events.
+                    #        line = line + ValStr.format(event[output]['value'])
+                    #except KeyError:
+                    #    line = line + ValStr.format(event[output]['value'])
                 print(line)
                 print(Seperator)
         
@@ -192,7 +231,8 @@ class timer:
             #This block is meant to check if any events at time 0 are 'real'. If this is true, 
             # skip the rest of this loop.
             try:
-                if self._EventList[0][Output]['type'] != 'calc':
+                #if self._EventList[0][Output]['type'] != 'calc':
+                if self._EventList[0][Output]['calc'] is False:
                     #There is an event at time 0 that is not calculated. Leave this alone.
                     continue
             except KeyError as e:
@@ -207,10 +247,10 @@ class timer:
             for event in reversed(self._EventList):
                 try:
                     DictFound = event[Output]
-                    if DictFound['type'] != 'calc':
+                    if DictFound['calc'] is False:
                         #Found a non-calculated event. Copy it to time 0.
                         self._EventList[0][Output] = DictFound.copy()  
-                        self._EventList[0][Output]['type'] = 'calc'
+                        self._EventList[0][Output]['calc'] = True
                         EventFound = True
                         break
                 except KeyError as e:
@@ -219,7 +259,7 @@ class timer:
                     if str(e) == "type":
                         #Output exsists, but does not have a 'type' key. This is a real event.
                         self._EventList[0][Output] = DictFound.copy()  
-                        self._EventList[0][Output]['type'] = 'calc'
+                        self._EventList[0][Output]['calc'] = True
                         EventFound = True
                         break
                     pass
@@ -227,7 +267,7 @@ class timer:
             #Deal with the case where there is an output on the list but no events associated with it.
             if not EventFound:
                 self._EventList[0][Output] = {"value": False}   #TODO: This sets to the state to false if there are no entries in the event table. Is this right?
-                self._EventList[0][Output]['type'] = 'calc'
+                self._EventList[0][Output]['calc'] = True
 
         #Now that we have fully populated the time 0 event, we can step through all the rest of
         # the events and determine what all the outputs should be at that time. We add or update
@@ -238,17 +278,17 @@ class timer:
             if i > 0:
                 for Output in self._OutputList:
                     try:
-                        if event[Output]['type'] == 'calc':
+                        if event[Output]['calc'] is True:
                             #Event found, but it is a calculated event. Update it from the previous event.
                             event[Output] = self._EventList[i-1][Output].copy()
-                            event[Output]['type'] = 'calc'
+                            event[Output]['calc'] = True
                     except KeyError as e:
                         #e is 'type' if the event exsists but does not have a 'type' key.
                         #e is equal to Output if the output does not exsist.
                         if str(e) != "type":
                             #Event not found. Add a calculated event to make state determination easier.
                             event[Output] = self._EventList[i-1][Output].copy()
-                            event[Output]['type'] = 'calc'
+                            event[Output]['calc'] = True
             i = i+1
         
     def GetCurrentState(self, TheTime):
@@ -260,15 +300,35 @@ class timer:
             raise TypeError('Time must be a time or time_struct object')
         else:
             CurrentTime = TheTime
-            
+        
+        #Find the index of the latest event in the past.
         i = 0
         for event in self._EventList:
-            if event['time'] > CurrentTime:     #TODO: What about equality instead of GT/LT?
-                return self._EventList[i-1]
+            #Note: Even though we have a > instead of a >= here, if there is an event at 
+            # CurrentTime, that event index will be used.
+            if event['time'] > CurrentTime:
+                break
             else:
                 i = i+1
                 
-        #We got all the way through the list without finding an event. Return the last event in the list.
-        return self._EventList[i-1] 
+        #i is the index of the latest event in the past.
+        i = i-1     
+        
+        ReturnState = {}
+        for key in self._EventList[i]:
+            if key == 'time':
+                ReturnState['time'] = self._EventList[i]['time']
+            elif self._EventList[i][key]['type'] == 'value':
+                #Event type: value
+                ReturnState[key] = self._EventList[i][key]['value']
+            elif self._EventList[i][key]['type'] == 'ramp':
+                if CurrentTime >= self._EventList[i][key]['EndTime']:
+                    ReturnState[key] = self._EventList[i][key]['EndValue']
+                else:
+                    ReturnState[key] = self._EventList[i][key]['m']*(CurrentTime.hour*60 + CurrentTime.minute)+self._EventList[i][key]['b']
+            else:
+                raise ValueError(f"Unknown event type {self._EventList[i-1][key]['type']}")
+                
+        return ReturnState
         
         
